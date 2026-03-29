@@ -64,14 +64,16 @@ export default async function handler(
       }
 
       // Return the MCP_BEARER_TOKEN as the access token
+      const tokenResponse = {
+        access_token: bearerToken,
+        token_type: "bearer",
+        expires_in: 3600 * 24 * 365, // 1 year
+      };
+      console.log("[token] issuing access_token starts with:", bearerToken.substring(0, 8));
+      console.log("[token] issuing access_token length:", bearerToken.length);
+      console.log("[token] full response:", JSON.stringify(tokenResponse));
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(
-        JSON.stringify({
-          access_token: bearerToken,
-          token_type: "bearer",
-          expires_in: 3600 * 24 * 365, // 1 year
-        }),
-      );
+      res.end(JSON.stringify(tokenResponse));
       return;
     }
 
