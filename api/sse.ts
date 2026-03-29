@@ -14,6 +14,11 @@ export default async function handler(
 ): Promise<void> {
   setCorsHeaders(res);
 
+  console.log("[sse] === incoming request ===");
+  console.log("[sse] method:", req.method);
+  console.log("[sse] url:", req.url);
+  console.log("[sse] headers:", JSON.stringify(req.headers, null, 2));
+
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
@@ -21,9 +26,11 @@ export default async function handler(
   }
 
   if (!validateBearerToken(req)) {
+    console.log("[sse] auth FAILED, returning 401");
     sendUnauthorized(res);
     return;
   }
+  console.log("[sse] auth PASSED");
 
   if (!["GET", "POST", "DELETE"].includes(req.method ?? "")) {
     res.writeHead(405, { "Content-Type": "text/plain" });
@@ -32,15 +39,30 @@ export default async function handler(
   }
 
   try {
+    console.log("[sse] creating MCP server and transport...");
     const server = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
 
+    transport.onerror = (err: Error) => {
+      console.error("[sse] transport error:", err.message, err.stack);
+    };
+
     await server.connect(transport);
+    console.log("[sse] server connected, handling request...");
+
+    const origWriteHead = res.writeHead.bind(res);
+    (res as any).writeHead = (statusCode: number, ...args: any[]) => {
+      console.log("[sse] response status:", statusCode);
+      return origWriteHead(statusCode, ...args);
+    };
+
     await transport.handleRequest(req, res);
+    console.log("[sse] handleRequest completed");
   } catch (e: any) {
-    console.error("MCP handler error:", e);
+    console.error("[sse] HANDLER ERROR:", e.message);
+    console.error("[sse] stack:", e.stack);
     if (!res.headersSent) {
       res.writeHead(500, { "Content-Type": "application/json" });
     }
