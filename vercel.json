@@ -3,6 +3,11 @@
   "buildCommand": "",
   "outputDirectory": ".",
   "rewrites": [
+    { "source": "/.well-known/oauth-authorization-server", "destination": "/api/well-known/oauth-authorization-server" },
+    { "source": "/.well-known/oauth-protected-resource/mcp", "destination": "/api/well-known/oauth-protected-resource/mcp" },
+    { "source": "/authorize", "destination": "/api/authorize" },
+    { "source": "/register", "destination": "/api/oauth/register" },
+    { "source": "/token", "destination": "/api/oauth/token" },
     { "source": "/mcp", "destination": "/api/mcp" },
     { "source": "/sse", "destination": "/api/sse" },
     { "source": "/health", "destination": "/api/health" }
