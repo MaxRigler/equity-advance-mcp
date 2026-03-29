@@ -1,4 +1,7 @@
 {
+  "version": 2,
+  "buildCommand": "",
+  "outputDirectory": ".",
   "rewrites": [
     { "source": "/mcp", "destination": "/api/mcp" },
     { "source": "/sse", "destination": "/api/sse" },
