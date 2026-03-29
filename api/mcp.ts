@@ -7,6 +7,15 @@ import {
   setCorsHeaders,
 } from "../src/auth.js";
 
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
+}
+
 export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -39,13 +48,24 @@ export default async function handler(
   }
 
   try {
-    const server = createMcpServer();
+    // Pre-read the body for POST requests so getRequestListener doesn't hang
+    // waiting on a body that Vercel may have already consumed.
+    let parsedBody: unknown | undefined;
+    if (req.method === "POST") {
+      const raw = await readBody(req);
+      console.log(`[mcp] body read (${raw.length} bytes) t=${Date.now() - t0}ms`);
+      try {
+        parsedBody = JSON.parse(raw);
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null }));
+        return;
+      }
+    }
 
-    // enableJsonResponse: true makes POST responses return as JSON instead of
-    // opening a long-lived SSE stream. This is critical for Vercel serverless
-    // where functions must complete within the timeout — SSE streams hang forever.
+    const server = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Stateless for serverless
+      sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
 
@@ -56,14 +76,7 @@ export default async function handler(
     await server.connect(transport);
     console.log(`[mcp] server connected t=${Date.now() - t0}ms`);
 
-    // Intercept writeHead to log status
-    const origWriteHead = res.writeHead.bind(res);
-    (res as any).writeHead = (statusCode: number, ...args: any[]) => {
-      console.log(`[mcp] response status: ${statusCode} t=${Date.now() - t0}ms`);
-      return origWriteHead(statusCode, ...args);
-    };
-
-    await transport.handleRequest(req, res);
+    await transport.handleRequest(req, res, parsedBody);
     console.log(`[mcp] handleRequest done t=${Date.now() - t0}ms`);
   } catch (e: any) {
     console.error(`[mcp] ERROR t=${Date.now() - t0}ms:`, e.message, e.stack);
