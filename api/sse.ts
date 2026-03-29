@@ -1,58 +1,51 @@
 // Alias for /mcp — some MCP clients try /sse
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "../src/server.js";
-import { validateBearerToken, unauthorizedResponse } from "../src/auth.js";
+import {
+  validateBearerToken,
+  sendUnauthorized,
+  setCorsHeaders,
+} from "../src/auth.js";
 
-export const config = {
-  runtime: "edge",
-};
+export default async function handler(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  setCorsHeaders(res);
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() });
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
   }
 
-  if (!validateBearerToken(request)) {
-    return unauthorizedResponse();
+  if (!validateBearerToken(req)) {
+    sendUnauthorized(res);
+    return;
   }
 
-  if (!["GET", "POST", "DELETE"].includes(request.method)) {
-    return new Response("Method not allowed", { status: 405 });
+  if (!["GET", "POST", "DELETE"].includes(req.method ?? "")) {
+    res.writeHead(405, { "Content-Type": "text/plain" });
+    res.end("Method not allowed");
+    return;
   }
 
   try {
     const server = createMcpServer();
-    const transport = new WebStandardStreamableHTTPServerTransport({
+    const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
 
     await server.connect(transport);
-
-    const response = await transport.handleRequest(request);
-
-    const headers = new Headers(response.headers);
-    for (const [key, value] of Object.entries(corsHeaders())) {
-      headers.set(key, value);
-    }
-
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    await transport.handleRequest(req, res);
   } catch (e: any) {
-    return new Response(
+    console.error("MCP handler error:", e);
+    if (!res.headersSent) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+    }
+    res.end(
       JSON.stringify({ error: "Internal server error", message: e.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders() } },
     );
   }
-}
-
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, mcp-session-id",
-    "Access-Control-Expose-Headers": "mcp-session-id",
-  };
 }

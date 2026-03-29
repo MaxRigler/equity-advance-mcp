@@ -1,11 +1,12 @@
-export function validateBearerToken(request: Request): boolean {
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+export function validateBearerToken(req: IncomingMessage): boolean {
   const token = process.env.MCP_BEARER_TOKEN;
   if (!token) {
-    // If no token configured, reject all requests for safety
     return false;
   }
 
-  const authHeader = request.headers.get("authorization");
+  const authHeader = req.headers["authorization"];
   if (!authHeader) return false;
 
   const match = authHeader.match(/^Bearer\s+(.+)$/i);
@@ -14,9 +15,17 @@ export function validateBearerToken(request: Request): boolean {
   return match[1] === token;
 }
 
-export function unauthorizedResponse(): Response {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), {
-    status: 401,
-    headers: { "Content-Type": "application/json" },
-  });
+export function sendUnauthorized(res: ServerResponse): void {
+  res.writeHead(401, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Unauthorized" }));
+}
+
+export function setCorsHeaders(res: ServerResponse): void {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, mcp-session-id",
+  );
+  res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
 }
