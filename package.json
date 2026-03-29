@@ -1,0 +1,21 @@
+{
+  "name": "equity-advance-mcp",
+  "version": "1.0.0",
+  "description": "Remote MCP server for Supabase CRM data — read-only access via Claude.ai",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && node dist/index.js"
+  },
+  "keywords": ["mcp", "supabase", "claude"],
+  "author": "MaxRigler",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@supabase/supabase-js": "^2.100.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
+}
