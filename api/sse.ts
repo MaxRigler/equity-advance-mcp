@@ -14,10 +14,8 @@ export default async function handler(
 ): Promise<void> {
   setCorsHeaders(res);
 
-  console.log("[sse] === incoming request ===");
-  console.log("[sse] method:", req.method);
-  console.log("[sse] url:", req.url);
-  console.log("[sse] headers:", JSON.stringify(req.headers, null, 2));
+  const t0 = Date.now();
+  console.log(`[sse] === request === ${req.method} ${req.url} t=0ms`);
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
@@ -30,7 +28,7 @@ export default async function handler(
     sendUnauthorized(res);
     return;
   }
-  console.log("[sse] auth PASSED");
+  console.log(`[sse] auth passed t=${Date.now() - t0}ms`);
 
   if (!["GET", "POST", "DELETE"].includes(req.method ?? "")) {
     res.writeHead(405, { "Content-Type": "text/plain" });
@@ -39,30 +37,23 @@ export default async function handler(
   }
 
   try {
-    console.log("[sse] creating MCP server and transport...");
     const server = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
+      enableJsonResponse: true,
     });
 
     transport.onerror = (err: Error) => {
-      console.error("[sse] transport error:", err.message, err.stack);
+      console.error(`[sse] transport error t=${Date.now() - t0}ms:`, err.message);
     };
 
     await server.connect(transport);
-    console.log("[sse] server connected, handling request...");
-
-    const origWriteHead = res.writeHead.bind(res);
-    (res as any).writeHead = (statusCode: number, ...args: any[]) => {
-      console.log("[sse] response status:", statusCode);
-      return origWriteHead(statusCode, ...args);
-    };
+    console.log(`[sse] server connected t=${Date.now() - t0}ms`);
 
     await transport.handleRequest(req, res);
-    console.log("[sse] handleRequest completed");
+    console.log(`[sse] handleRequest done t=${Date.now() - t0}ms`);
   } catch (e: any) {
-    console.error("[sse] HANDLER ERROR:", e.message);
-    console.error("[sse] stack:", e.stack);
+    console.error(`[sse] ERROR t=${Date.now() - t0}ms:`, e.message, e.stack);
     if (!res.headersSent) {
       res.writeHead(500, { "Content-Type": "application/json" });
     }
@@ -70,4 +61,5 @@ export default async function handler(
       JSON.stringify({ error: "Internal server error", message: e.message }),
     );
   }
+  console.log(`[sse] function completing t=${Date.now() - t0}ms`);
 }

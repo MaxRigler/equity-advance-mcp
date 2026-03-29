@@ -13,10 +13,8 @@ export default async function handler(
 ): Promise<void> {
   setCorsHeaders(res);
 
-  console.log("[mcp] === incoming request ===");
-  console.log("[mcp] method:", req.method);
-  console.log("[mcp] url:", req.url);
-  console.log("[mcp] headers:", JSON.stringify(req.headers, null, 2));
+  const t0 = Date.now();
+  console.log(`[mcp] === request === ${req.method} ${req.url} t=0ms`);
 
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -31,43 +29,44 @@ export default async function handler(
     sendUnauthorized(res);
     return;
   }
-  console.log("[mcp] auth PASSED");
+  console.log(`[mcp] auth passed t=${Date.now() - t0}ms`);
 
-  // Only POST, GET (for SSE), and DELETE are valid MCP methods
+  // Only POST, GET, and DELETE are valid MCP Streamable HTTP methods
   if (!["GET", "POST", "DELETE"].includes(req.method ?? "")) {
-    console.log("[mcp] method not allowed:", req.method);
     res.writeHead(405, { "Content-Type": "text/plain" });
     res.end("Method not allowed");
     return;
   }
 
   try {
-    console.log("[mcp] creating MCP server and transport...");
     const server = createMcpServer();
+
+    // enableJsonResponse: true makes POST responses return as JSON instead of
+    // opening a long-lived SSE stream. This is critical for Vercel serverless
+    // where functions must complete within the timeout — SSE streams hang forever.
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // Stateless for serverless
+      enableJsonResponse: true,
     });
 
-    // Log transport errors
     transport.onerror = (err: Error) => {
-      console.error("[mcp] transport error:", err.message, err.stack);
+      console.error(`[mcp] transport error t=${Date.now() - t0}ms:`, err.message);
     };
 
     await server.connect(transport);
-    console.log("[mcp] server connected to transport, handling request...");
+    console.log(`[mcp] server connected t=${Date.now() - t0}ms`);
 
-    // Intercept the response to log the status code
+    // Intercept writeHead to log status
     const origWriteHead = res.writeHead.bind(res);
     (res as any).writeHead = (statusCode: number, ...args: any[]) => {
-      console.log("[mcp] response status:", statusCode);
+      console.log(`[mcp] response status: ${statusCode} t=${Date.now() - t0}ms`);
       return origWriteHead(statusCode, ...args);
     };
 
     await transport.handleRequest(req, res);
-    console.log("[mcp] handleRequest completed");
+    console.log(`[mcp] handleRequest done t=${Date.now() - t0}ms`);
   } catch (e: any) {
-    console.error("[mcp] HANDLER ERROR:", e.message);
-    console.error("[mcp] stack:", e.stack);
+    console.error(`[mcp] ERROR t=${Date.now() - t0}ms:`, e.message, e.stack);
     if (!res.headersSent) {
       res.writeHead(500, { "Content-Type": "application/json" });
     }
@@ -75,4 +74,5 @@ export default async function handler(
       JSON.stringify({ error: "Internal server error", message: e.message }),
     );
   }
+  console.log(`[mcp] function completing t=${Date.now() - t0}ms`);
 }
